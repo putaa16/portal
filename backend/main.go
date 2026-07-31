@@ -10,6 +10,8 @@ import (
 	"github.com/portal-berita/backend/database"
 	"github.com/portal-berita/backend/handlers"
 	"github.com/portal-berita/backend/middleware"
+	
+	newsplugin "github.com/portal-berita/plugin-berita"
 )
 
 func main() {
@@ -56,24 +58,20 @@ func main() {
 	// Rute Autentikasi
 	app.Post("/login", handlers.Login)
 
-	// Rute Publik
-	app.Get("/berita", handlers.GetAllBerita)
-	app.Get("/berita/:id", handlers.GetBeritaByID)
-	app.Get("/kategori", handlers.GetAllKategori)
-
+	// Rute Publik (Plugin Berita)
+	// Kita lewatkan app (router utama) sebagai public router
 	// Rute Admin (Protected)
 	admin := app.Group("/admin", middleware.Protected())
-
-	// Kategori CRUD
-	admin.Post("/kategori", handlers.CreateKategori)
-	admin.Put("/kategori/:id", handlers.UpdateKategori)
-	admin.Delete("/kategori/:id", handlers.DeleteKategori)
-
-	// Berita CRUD
-	admin.Post("/berita", handlers.CreateBerita)
-	admin.Put("/berita/:id", handlers.UpdateBerita)
-	admin.Delete("/berita/:id", handlers.DeleteBerita)
-	admin.Post("/upload", handlers.UploadMedia)
+	
+	// Register Plugin Berita
+	err := newsplugin.RegisterPlugin(newsplugin.Config{
+		PublicRouter: app,
+		AdminRouter:  admin,
+		DB:           database.DB,
+	})
+	if err != nil {
+		log.Fatalf("Gagal register plugin berita: %v", err)
+	}
 
 	log.Fatal(app.Listen(":3000"))
 }
