@@ -1,0 +1,30 @@
+# Node.js / frontend dependencies & build outputs
+node_modules/
+.svelte-kit/
+build/
+.env
+.env.*
+!.env.example
+
+# Go / backend outputs & uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+backend/main
+
+# OS & Editor configurations
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.log
