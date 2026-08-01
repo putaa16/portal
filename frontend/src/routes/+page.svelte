@@ -14,6 +14,12 @@
 			loading = false;
 		}
 	});
+
+	function stripHTML(html: string) {
+		if (!html) return '';
+		// Strip all HTML tags and replace with space, collapsing multiple spaces
+		return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+	}
 </script>
 
 <svelte:head>
@@ -58,7 +64,7 @@
 		{:else}
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 				{#each beritaList as berita}
-					<article class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-xl transition-all duration-300 group cursor-pointer flex flex-col">
+					
 						<div class="relative h-56 overflow-hidden bg-slate-100">
 							{#if berita.foto}
 								<img 
@@ -92,15 +98,16 @@
 								{berita.judul}
 							</h3>
 							<p class="text-slate-600 line-clamp-3 mb-4 flex-1">
-								{berita.deskripsi}
+								{stripHTML(berita.deskripsi)}
 							</p>
 							<div class="pt-4 border-t border-slate-100 flex items-center justify-between">
-								<button class="text-blue-600 font-medium text-sm inline-flex items-center gap-1 group-hover:gap-2 transition-all">
-									Baca selengkapnya <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-								</button>
+								<a href="/berita/{berita.id}" class="transition-all duration-300 group cursor-pointer flex flex-col focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2">
+									<span class="text-blue-600 font-medium text-sm inline-flex items-center gap-1 group-hover:gap-2 transition-all">
+										Baca selengkapnya <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+									</span>
+								</a>
 							</div>
 						</div>
-					</article>
 				{/each}
 			</div>
 		{/if}

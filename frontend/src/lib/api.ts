@@ -23,6 +23,10 @@ export async function fetchAPI(endpoint: string, options: RequestInit = {}) {
 
 	if (!res.ok) {
 		const error = await res.json().catch(() => ({}));
+		if (res.status === 401 && typeof window !== 'undefined') {
+			localStorage.removeItem('token');
+			window.location.href = '/login';
+		}
 		throw new Error(error.error || 'Terjadi kesalahan pada server');
 	}
 

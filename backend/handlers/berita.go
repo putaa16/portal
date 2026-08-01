@@ -2,12 +2,32 @@ package handlers
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/portal-berita/backend/database"
 	"github.com/portal-berita/backend/models"
 )
+
+// deleteLocalFile menghapus berkas fisik di server berdasarkan URL database
+func deleteLocalFile(fileURL string) {
+	if fileURL == "" {
+		return
+	}
+	// Mengubah "/uploads/nama-file.png" menjadi "./uploads/nama-file.png"
+	filePath := filepath.Join(".", fileURL)
+
+	// Cek apakah file ada, lalu hapus
+	if _, err := os.Stat(filePath); err == nil {
+		if err := os.Remove(filePath); err != nil {
+			fmt.Printf("Gagal menghapus berkas lama %s: %v\n", filePath, err)
+		} else {
+			fmt.Printf("Berkas lama berhasil dihapus: %s\n", filePath)
+		}
+	}
+}
 
 func CreateBerita(c *fiber.Ctx) error {
 	var berita models.Berita
@@ -26,7 +46,8 @@ func CreateBerita(c *fiber.Ctx) error {
 	}
 
 	if err := database.DB.Create(&berita).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berita"})
+		fmt.Printf("GORM Create Error: %v\n", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Gagal menyimpan berita: %v", err)})
 	}
 
 	return c.JSON(berita)
@@ -60,6 +81,10 @@ func UpdateBerita(c *fiber.Ctx) error {
 	if err == nil {
 		filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
 		if err := c.SaveFile(file, "./uploads/"+filename); err == nil {
+			// Hapus foto lama jika ada sebelum memperbarui dengan foto baru
+			if berita.Foto != "" {
+				deleteLocalFile(berita.Foto)
+			}
 			berita.Foto = "/uploads/" + filename
 		}
 	}
@@ -68,12 +93,24 @@ func UpdateBerita(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Input tidak valid"})
 	}
 
-	database.DB.Save(&berita)
+	if err := database.DB.Save(&berita).Error; err != nil {
+		fmt.Printf("GORM Save Error: %v\n", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Gagal memperbarui berita: %v", err)})
+	}
 	return c.JSON(berita)
 }
 
 func DeleteBerita(c *fiber.Ctx) error {
 	id := c.Params("id")
+	var berita models.Berita
+
+	// Temukan data berita terlebih dahulu untuk mendapatkan URL foto yang akan dihapus
+	if err := database.DB.First(&berita, id).Error; err == nil {
+		if berita.Foto != "" {
+			deleteLocalFile(berita.Foto)
+		}
+	}
+
 	if err := database.DB.Delete(&models.Berita{}, id).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menghapus berita"})
 	}

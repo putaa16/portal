@@ -40,10 +40,36 @@
     DropDownBackColorPicker,
     MoreStylesDropDown,
     InsertDropDown,
-    DropDownAlign
+    DropDownAlign,
+    // Dropdown Items
+    ParagraphDropDownItem,
+    HeadingDropDownItem,
+    BulletDropDrownItem,
+    NumberDropDrownItem,
+    CheckDropDrownItem,
+    QuoteDropDrownItem,
+    CodeDropDrownItem,
+    InsertHRDropDownItem,
+    InsertImageDropDownItem,
+    InsertColumnLayoutDropDownItem,
+    InsertTableDropDownItem,
+    InsertYoutubeDropDownItem,
+    InsertTweetDropDownItem,
+    InsertBlueskyDropDownItem,
+    StrikethroughDropDownItem,
+    SubscriptDropDownItem,
+    SuperscriptDropDownItem,
+    ClearFormattingDropDownItem,
+    // Dialogs
+    InsertColumnsDialog,
+    InsertTableDialog,
+    InsertYoutubeDialog,
+    InsertTweetDialog,
+    InsertBlueskyDialog,
+    CaptionEditorHistoryPlugin
   } from 'svelte-lexical';
   import { theme } from 'svelte-lexical/dist/themes/default';
-  
+  import InsertImageDialog from './InsertImageDialog.svelte';
   import { 
     HeadingNode, 
     QuoteNode, 
@@ -101,6 +127,7 @@
   };
 
   let composer = $state<any>(undefined);
+  let editorContainerRef = $state<HTMLElement | undefined>(undefined);
   let isInitialLoad = true;
 
   function isEditorFocused(editor: any): boolean {
@@ -177,7 +204,17 @@
         <UndoButton />
         <RedoButton />
         <Divider />
-        <BlockFormatDropDown />
+        <BlockFormatDropDown>
+          <ParagraphDropDownItem />
+          <HeadingDropDownItem headingSize="h1" />
+          <HeadingDropDownItem headingSize="h2" />
+          <HeadingDropDownItem headingSize="h3" />
+          <BulletDropDrownItem />
+          <NumberDropDrownItem />
+          <CheckDropDrownItem />
+          <QuoteDropDrownItem />
+          <CodeDropDrownItem />
+        </BlockFormatDropDown>
         <Divider />
         <FontFamilyDropDown />
         <FontSizeDropDown />
@@ -191,16 +228,37 @@
         <DropDownBackColorPicker />
         <Divider />
         <InsertLink />
-        <InsertDropDown />
-        <MoreStylesDropDown />
+        <InsertDropDown>
+          <InsertHRDropDownItem />
+          <InsertImageDropDownItem />
+          <InsertTableDropDownItem />
+          <InsertColumnLayoutDropDownItem />
+          <InsertYoutubeDropDownItem />
+          <InsertTweetDropDownItem />
+          <InsertBlueskyDropDownItem />
+        </InsertDropDown>
+        <MoreStylesDropDown>
+          <StrikethroughDropDownItem />
+          <SubscriptDropDownItem />
+          <SuperscriptDropDownItem />
+          <ClearFormattingDropDownItem />
+        </MoreStylesDropDown>
         <Divider />
         <DropDownAlign />
+
+        <!-- Dialog Components (Required by Insert Actions to register trigger functions, placed here for activeEditor context) -->
+        <InsertImageDialog />
+        <InsertColumnsDialog />
+        <InsertTableDialog />
+        <InsertYoutubeDialog />
+        <InsertTweetDialog />
+        <InsertBlueskyDialog />
       {/snippet}
     </Toolbar>
-    <div class="editor-container relative border-t border-slate-200">
+    <div class="editor-container relative border-t border-slate-200" bind:this={editorContainerRef}>
       <div class="editor-scroller min-h-[350px] max-h-[600px] overflow-y-auto">
         <div class="editor prose max-w-none w-full">
-          <ContentEditable class="focus:outline-none p-4 min-h-[350px]" />
+          <ContentEditable className="ContentEditable__root focus:outline-none p-4 min-h-[350px]" />
         </div>
       </div>
       <RichTextPlugin />
@@ -208,14 +266,18 @@
       <ListPlugin />
       <CheckListPlugin />
       <HorizontalRulePlugin />
-      <ImagePlugin />
+      <ImagePlugin captionsEnabled={true}>
+        <CaptionEditorHistoryPlugin />
+      </ImagePlugin>
       <LinkPlugin />
       <AutoLinkPlugin />
       <CodeHighlightPrismPlugin />
       <ColumnLayoutPlugin />
       <TablePlugin />
-      <TableActionMenuPlugin />
-      <TableHoverActionPlugin />
+      {#if editorContainerRef}
+        <TableActionMenuPlugin anchorElem={editorContainerRef!} />
+        <TableHoverActionPlugin anchorElem={editorContainerRef!} />
+      {/if}
       <TableCellResizerPlugin />
       <YoutubePlugin />
       <TwitterPlugin />
@@ -282,12 +344,39 @@
     align-self: center !important;
   }
 
-  /* Dropdown Styles */
-  :global(.svelte-lexical .dropdown) {
+  /* Dropdown Styles (Applied globally as dropdowns are mounted via Portal to document.body) */
+  :global(.svelte-lexical.dropdown) {
     background-color: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
+    border: 1px solid #cbd5e1 !important; /* Slate-300 */
     border-radius: 8px !important;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
+    z-index: 9999 !important;
+    padding: 6px !important;
+    min-width: 160px !important;
+  }
+
+  :global(.svelte-lexical.dropdown .item) {
+    border-radius: 6px !important;
+    transition: all 0.15s ease !important;
+    padding: 8px 12px !important;
+    color: #334155 !important; /* slate-700 */
+    background-color: #ffffff !important;
+  }
+
+  :global(.svelte-lexical.dropdown .item:hover) {
+    background-color: #f1f5f9 !important; /* slate-100 */
+    color: #0f172a !important; /* slate-900 */
+  }
+
+  :global(.svelte-lexical.dropdown .item.active) {
+    background-color: #e2e8f0 !important; /* slate-200 */
+    color: #1e3a8a !important;
+  }
+
+  :global(.svelte-lexical.dropdown .divider) {
+    background-color: #e2e8f0 !important;
+    height: 1px !important;
+    margin: 6px 0 !important;
   }
 
   /* Content Area */

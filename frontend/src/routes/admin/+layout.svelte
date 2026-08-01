@@ -22,7 +22,7 @@
 	}
 </script>
 
-<Toaster />
+<Toaster richColors />
 
 <div class="min-h-screen bg-slate-50 font-sans flex">
 	<!-- Sidebar -->

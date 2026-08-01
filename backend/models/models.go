@@ -23,7 +23,7 @@ type Berita struct {
 	Lokasi     string    `gorm:"not null" json:"lokasi" form:"lokasi"`
 	KategoriID uint      `json:"kategori_id" form:"kategori_id"`
 	Kategori   Kategori  `gorm:"foreignKey:KategoriID" json:"kategori"`
-	Deskripsi  string    `gorm:"type:text;not null" json:"deskripsi" form:"deskripsi"`
+	Deskripsi  string    `gorm:"type:longtext;not null" json:"deskripsi" form:"deskripsi"`
 	Foto       string    `json:"foto"`
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`

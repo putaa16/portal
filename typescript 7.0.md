@@ -17,6 +17,11 @@ Create -> Nama Mitra
 CRUD
 
 
-Notifikasi
--Created/Updated/Deleted berhasil (toast Svelte Sonner)
--Created/Updated/Deleted gagal (toast Svelte Sonner)
+Notifikasi menggunakan (toast Svelte Sonner v1.1.1)
+-Created/Updated/Deleted berhasil 
+-Created/Updated/Deleted gagal 
+
+Validasi Form 
+    - menggunakan sveltekit-superforms v2.30.2
+
+

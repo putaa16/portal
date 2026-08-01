@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fetchAPI } from '$lib/api';
+	import { toast } from 'svelte-sonner';
 
 	let kategoris: any[] = [];
 	let loading = true;
@@ -16,7 +17,7 @@
 			kategoris = await fetchAPI('/kategori');
 		} catch (error) {
 			console.error(error);
-			alert('Gagal memuat kategori');
+			toast.error('Gagal memuat kategori');
 		} finally {
 			loading = false;
 		}
@@ -53,16 +54,18 @@
 					method: 'PUT',
 					body: JSON.stringify({ nama: formNama })
 				});
+				toast.success('Kategori berhasil diperbarui!');
 			} else {
 				await fetchAPI('/admin/kategori', {
 					method: 'POST',
 					body: JSON.stringify({ nama: formNama })
 				});
+				toast.success('Kategori berhasil ditambahkan!');
 			}
 			closeModal();
 			loadKategori();
 		} catch (error: any) {
-			alert(error.message);
+			toast.error(error.message || 'Gagal menyimpan kategori');
 		} finally {
 			isSubmitting = false;
 		}
@@ -75,9 +78,10 @@
 			await fetchAPI(`/admin/kategori/${id}`, {
 				method: 'DELETE'
 			});
+			toast.success('Kategori berhasil dihapus!');
 			loadKategori();
 		} catch (error: any) {
-			alert(error.message);
+			toast.error(error.message || 'Gagal menghapus kategori');
 		}
 	}
 </script>
