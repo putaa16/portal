@@ -25,6 +25,7 @@ type Berita struct {
 	Kategori   Kategori  `gorm:"foreignKey:KategoriID" json:"kategori"`
 	Deskripsi  string    `gorm:"type:longtext;not null" json:"deskripsi" form:"deskripsi"`
 	Foto       string    `json:"foto"`
+	Status     string    `gorm:"not null;default:'published'" json:"status" form:"status"`
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
@@ -39,7 +40,18 @@ type Agenda struct {
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
+type Mitra struct {
+	ID           uint      `gorm:"primaryKey" json:"id" form:"id"`
+	Nama         string    `gorm:"not null" json:"nama" form:"nama"`
+	Logo         string    `gorm:"not null" json:"logo"`
+	MasaAktif    time.Time `gorm:"not null" json:"masa_aktif" form:"masa_aktif"`
+	BuktiDokumen string    `gorm:"not null" json:"bukti_dokumen"`
+	Status       string    `gorm:"not null" json:"status" form:"status"` // "draft" atau "published"
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&Admin{}, &Kategori{}, &Berita{}, &Agenda{})
+	return db.AutoMigrate(&Admin{}, &Kategori{}, &Berita{}, &Agenda{}, &Mitra{})
 }
 

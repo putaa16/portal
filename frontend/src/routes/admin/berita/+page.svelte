@@ -36,6 +36,7 @@
         const hasMedia = val.includes('<img') || val.includes('<iframe') || val.includes('<video');
         return cleanText.length > 0 || hasMedia;
       }, "Deskripsi/isi berita tidak boleh kosong"),
+    status: z.enum(["draft", "published"]),
     foto: z.any().optional()
   }).superRefine((data, ctx) => {
     // Foto wajib diunggah untuk berita baru
@@ -78,6 +79,7 @@
       lokasi: "",
       kategori_id: 0,
       deskripsi: "",
+      status: "published" as "draft" | "published",
       foto: null as File | null
     },
     {
@@ -101,6 +103,7 @@
           formData.append("lokasi", f.data.lokasi);
           formData.append("kategori_id", f.data.kategori_id.toString());
           formData.append("deskripsi", f.data.deskripsi);
+          formData.append("status", f.data.status);
           if (f.data.foto) {
             formData.append("foto", f.data.foto);
           }
@@ -133,7 +136,7 @@
     loading = true;
     try {
       const [resBerita, resKat] = await Promise.all([
-        fetchAPI("/berita"),
+        fetchAPI("/admin/berita"),
         fetchAPI("/kategori"),
       ]);
       beritas = resBerita;
@@ -168,6 +171,7 @@
       $form.lokasi = berita.lokasi;
       $form.kategori_id = berita.kategori_id;
       $form.deskripsi = berita.deskripsi;
+      $form.status = berita.status || "published";
       existingFotoUrl = berita.foto;
     } else {
       editId = null;
@@ -175,6 +179,7 @@
       $form.lokasi = "";
       $form.kategori_id = 0;
       $form.deskripsi = "";
+      $form.status = "published";
       existingFotoUrl = "";
     }
     $form.foto = null;
@@ -263,6 +268,10 @@
           >
           <th
             class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase"
+            >Status</th
+          >
+          <th
+            class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase"
             >Tanggal</th
           >
           <th
@@ -274,13 +283,13 @@
       <tbody class="bg-white divide-y divide-slate-200">
         {#if loading}
           <tr
-            ><td colspan="5" class="px-6 py-12 text-center text-slate-500"
+            ><td colspan="6" class="px-6 py-12 text-center text-slate-500"
               >Memuat data...</td
             ></tr
           >
         {:else if beritas.length === 0}
           <tr
-            ><td colspan="5" class="px-6 py-12 text-center text-slate-500"
+            ><td colspan="6" class="px-6 py-12 text-center text-slate-500"
               >Belum ada berita.</td
             ></tr
           >
@@ -316,6 +325,17 @@
                   class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium border border-slate-200"
                   >{berita.kategori?.nama || "-"}</span
                 >
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                {#if berita.status === 'published'}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Published
+                  </span>
+                {:else}
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                    Draft
+                  </span>
+                {/if}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                 {new Date(berita.created_at).toLocaleDateString("id-ID")}
@@ -429,6 +449,25 @@
                 />
                 {#if $errors.lokasi}
                   <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.lokasi}</p>
+                {/if}
+              </div>
+
+              <div class="col-span-2">
+                <label
+                  for="status"
+                  class="block text-sm font-medium text-slate-700">Status Publikasi</label
+                >
+                <select
+                  id="status"
+                  name="status"
+                  bind:value={$form.status}
+                  class="mt-1 block w-full border {$errors.status ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
+                >
+                  <option value="published">Published (Tampil di Publik)</option>
+                  <option value="draft">Draft (Hanya di Admin Panel)</option>
+                </select>
+                {#if $errors.status}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.status}</p>
                 {/if}
               </div>
 

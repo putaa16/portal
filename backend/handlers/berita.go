@@ -51,6 +51,14 @@ func CreateBerita(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Input tidak valid"})
 	}
 
+	berita.Status = strings.TrimSpace(berita.Status)
+	if berita.Status == "" {
+		berita.Status = "published"
+	}
+	if berita.Status != "draft" && berita.Status != "published" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Status berita tidak valid"})
+	}
+
 	// Validasi input wajib
 	judul := strings.TrimSpace(berita.Judul)
 	if judul == "" {
@@ -114,7 +122,14 @@ func CreateBerita(c *fiber.Ctx) error {
 
 func GetAllBerita(c *fiber.Ctx) error {
 	var beritas []models.Berita
-	database.DB.Preload("Kategori").Order("created_at desc").Find(&beritas)
+	isAdmin := strings.HasPrefix(c.Path(), "/admin")
+
+	query := database.DB.Preload("Kategori")
+	if !isAdmin {
+		query = query.Where("status = ?", "published")
+	}
+
+	query.Order("created_at desc").Find(&beritas)
 	return c.JSON(beritas)
 }
 
@@ -124,6 +139,12 @@ func GetBeritaByID(c *fiber.Ctx) error {
 	if err := database.DB.Preload("Kategori").First(&berita, id).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Berita tidak ditemukan"})
 	}
+
+	isAdmin := strings.HasPrefix(c.Path(), "/admin")
+	if !isAdmin && berita.Status != "published" {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Berita tidak ditemukan"})
+	}
+
 	return c.JSON(berita)
 }
 
@@ -139,6 +160,14 @@ func UpdateBerita(c *fiber.Ctx) error {
 
 	if err := c.BodyParser(&berita); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Input tidak valid"})
+	}
+
+	berita.Status = strings.TrimSpace(berita.Status)
+	if berita.Status == "" {
+		berita.Status = "published"
+	}
+	if berita.Status != "draft" && berita.Status != "published" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Status berita tidak valid"})
 	}
 
 	// Validasi input wajib

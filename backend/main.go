@@ -15,12 +15,13 @@ import (
 func main() {
 	// Pastikan folder uploads ada
 	os.MkdirAll("./uploads", os.ModePerm)
+	os.MkdirAll("./uploads/documents", os.ModePerm)
 
 	// Inisialisasi koneksi DB dan Migrasi
 	database.Connect()
 
 	app := fiber.New(fiber.Config{
-		BodyLimit: 5 * 1024 * 1024, // 5 MB
+		BodyLimit: 15 * 1024 * 1024, // 15 MB
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
@@ -28,7 +29,7 @@ func main() {
 			}
 			if code == fiber.StatusRequestEntityTooLarge {
 				return c.Status(code).JSON(fiber.Map{
-					"error": "Ukuran file terlalu besar. Maksimal 5 MB.",
+					"error": "Ukuran file terlalu besar. Maksimal 15 MB.",
 				})
 			}
 			return c.Status(code).JSON(fiber.Map{
@@ -62,6 +63,8 @@ func main() {
 	app.Get("/kategori", handlers.GetAllKategori)
 	app.Get("/agenda", handlers.GetAllAgenda)
 	app.Get("/agenda/:id", handlers.GetAgendaByID)
+	app.Get("/mitra", handlers.GetAllMitra)
+	app.Get("/mitra/:id", handlers.GetMitraByID)
 
 	// Rute Admin (Protected)
 	admin := app.Group("/admin", middleware.Protected())
@@ -72,6 +75,8 @@ func main() {
 	admin.Delete("/kategori/:id", handlers.DeleteKategori)
 
 	// Berita CRUD
+	admin.Get("/berita", handlers.GetAllBerita)
+	admin.Get("/berita/:id", handlers.GetBeritaByID)
 	admin.Post("/berita", handlers.CreateBerita)
 	admin.Put("/berita/:id", handlers.UpdateBerita)
 	admin.Delete("/berita/:id", handlers.DeleteBerita)
@@ -81,6 +86,13 @@ func main() {
 	admin.Post("/agenda", handlers.CreateAgenda)
 	admin.Put("/agenda/:id", handlers.UpdateAgenda)
 	admin.Delete("/agenda/:id", handlers.DeleteAgenda)
+
+	// Mitra CRUD
+	admin.Get("/mitra", handlers.GetAllMitra)
+	admin.Get("/mitra/:id", handlers.GetMitraByID)
+	admin.Post("/mitra", handlers.CreateMitra)
+	admin.Put("/mitra/:id", handlers.UpdateMitra)
+	admin.Delete("/mitra/:id", handlers.DeleteMitra)
 
 	log.Fatal(app.Listen(":3000"))
 

@@ -6,12 +6,12 @@ vite 8.1.5 -->
 
 
 Fitur 
-1. Kelola Kerja Sama
+<!-- 1. Kelola Kerja Sama
 CRUD 
 Create -> Nama Mitra
             Logo Mitra
             Masa Aktif Kerja Sama (Tanggal, bulan ,Tahun)
-            Bukti Dokumen Kerja Sama (Uploads/File)
+            Bukti Dokumen Kerja Sama (Uploads/File) -->
 
 <!-- 2. Kelola Agenda
 CRUD

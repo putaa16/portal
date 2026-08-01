@@ -33,11 +33,14 @@
 						<span class="font-bold text-xl tracking-tight text-slate-800">PortalBerita</span>
 					</a>
 					<div class="hidden sm:flex sm:space-x-8">
-						<a href="/" class="inline-flex items-center px-1 pt-1 border-b-2 border-blue-600 text-sm font-medium text-blue-600 transition-all">
+						<a href="/" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
 							Berita
 						</a>
 						<a href="/agenda" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
 							Agenda
+						</a>
+						<a href="/mitra" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
+							Mitra
 						</a>
 					</div>
 				</div>
