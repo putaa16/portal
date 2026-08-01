@@ -73,7 +73,7 @@
 		{:else}
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 				{#each beritaList as berita}
-					
+					<div class="group bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
 						<div class="relative h-56 overflow-hidden bg-slate-100">
 							{#if berita.foto}
 								<img 
@@ -117,8 +117,10 @@
 								</a>
 							</div>
 						</div>
+					</div>
 				{/each}
 			</div>
+
 		{/if}
 	</main>
 </div>

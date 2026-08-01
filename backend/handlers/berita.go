@@ -135,6 +135,8 @@ func UpdateBerita(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Berita tidak ditemukan"})
 	}
 
+	oldFoto := berita.Foto
+
 	if err := c.BodyParser(&berita); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Input tidak valid"})
 	}
@@ -187,10 +189,13 @@ func UpdateBerita(c *fiber.Ctx) error {
 		}
 
 		// Hapus foto lama jika ada sebelum memperbarui dengan foto baru
-		if berita.Foto != "" {
-			deleteLocalFile(berita.Foto)
+		if oldFoto != "" {
+			deleteLocalFile(oldFoto)
 		}
 		berita.Foto = "/uploads/" + filename
+	} else {
+		// Jika tidak ada foto baru, pastikan foto lama tetap dipertahankan
+		berita.Foto = oldFoto
 	}
 
 	if err := database.DB.Save(&berita).Error; err != nil {

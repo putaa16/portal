@@ -117,6 +117,8 @@ func UpdateAgenda(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Agenda tidak ditemukan"})
 	}
 
+	oldFoto := agenda.Foto
+
 	judul := strings.TrimSpace(c.FormValue("judul"))
 	tanggalStr := strings.TrimSpace(c.FormValue("tanggal"))
 	deskripsi := strings.TrimSpace(c.FormValue("deskripsi"))
@@ -176,10 +178,13 @@ func UpdateAgenda(c *fiber.Ctx) error {
 		}
 
 		// Delete old file
-		if agenda.Foto != "" {
-			deleteLocalFile(agenda.Foto)
+		if oldFoto != "" {
+			deleteLocalFile(oldFoto)
 		}
 		agenda.Foto = "/uploads/" + filename
+	} else {
+		// Pastikan foto lama dipertahankan jika tidak ada update foto
+		agenda.Foto = oldFoto
 	}
 
 	agenda.Judul = judul
