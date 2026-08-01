@@ -44,6 +44,10 @@
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9.5a2.5 2.5 0 00-2.5-2.5H15M9 11l3 3m0 0l3-3m-3 3V8"></path></svg>
 				Berita
 			</a>
+			<a href="/admin/agenda" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 font-medium hover:bg-slate-50 hover:text-blue-600 transition-colors">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+				Agenda
+			</a>
 		</div>
 		<div class="absolute bottom-0 w-full p-4 border-t border-slate-200">
 			<button onclick={handleLogout} class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-600 font-medium hover:bg-red-50 transition-colors w-full">
@@ -70,9 +74,11 @@
 				<a href="/admin" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Dashboard</a>
 				<a href="/admin/kategori" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Kategori</a>
 				<a href="/admin/berita" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Berita</a>
+				<a href="/admin/agenda" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Agenda</a>
 				<button onclick={handleLogout} class="block w-full text-left px-3 py-2 rounded-lg text-red-600 font-medium hover:bg-red-50">Logout</button>
 			</div>
 		{/if}
+
 
 		<main class="flex-1 overflow-y-auto p-6 md:p-8">
 			<slot />

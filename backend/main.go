@@ -60,6 +60,8 @@ func main() {
 	app.Get("/berita", handlers.GetAllBerita)
 	app.Get("/berita/:id", handlers.GetBeritaByID)
 	app.Get("/kategori", handlers.GetAllKategori)
+	app.Get("/agenda", handlers.GetAllAgenda)
+	app.Get("/agenda/:id", handlers.GetAgendaByID)
 
 	// Rute Admin (Protected)
 	admin := app.Group("/admin", middleware.Protected())
@@ -75,5 +77,11 @@ func main() {
 	admin.Delete("/berita/:id", handlers.DeleteBerita)
 	admin.Post("/upload", handlers.UploadMedia)
 
+	// Agenda CRUD
+	admin.Post("/agenda", handlers.CreateAgenda)
+	admin.Put("/agenda/:id", handlers.UpdateAgenda)
+	admin.Delete("/agenda/:id", handlers.DeleteAgenda)
+
 	log.Fatal(app.Listen(":3000"))
+
 }
