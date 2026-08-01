@@ -40,9 +40,11 @@
     "mode-watcher": "^1.1.0",
     "svelte-lexical": "^0.6.5",
     "svelte-sonner": "^1.1.1",
+    "sveltekit-superforms": "^2.30.2",
     "tailwind-merge": "^3.6.0",
     "tailwind-variants": "^3.3.0",
     "y-protocols": "^1.0.7",
-    "yjs": "^13.6.31"
+    "yjs": "^13.6.31",
+    "zod": "^4.4.3"
   }
 }

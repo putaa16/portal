@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { fetchAPI, API_URL } from "$lib/api";
   import LexicalEditor from "$lib/components/LexicalEditor.svelte";
   import { toast } from "svelte-sonner";
+  import { superForm } from "sveltekit-superforms";
+  import { zod4 } from "sveltekit-superforms/adapters";
+  import { z } from "zod";
 
   let beritas = $state<any[]>([]);
   let kategoris = $state<any[]>([]);
@@ -12,12 +15,119 @@
   let isSubmitting = $state(false);
 
   let editId = $state<number | null>(null);
-  let formJudul = $state("");
-  let formLokasi = $state("");
-  let formKategori = $state<any>("");
-  let formDeskripsi = $state("");
-  let formFoto = $state<File | null>(null);
   let existingFotoUrl = $state("");
+  let fotoPreviewUrl = $state("");
+
+  // Zod validation schema
+  const schema = z.object({
+    judul: z.string()
+      .trim()
+      .min(1, "Judul berita tidak boleh kosong")
+      .min(5, "Judul berita minimal harus terdiri dari 5 karakter"),
+    lokasi: z.string()
+      .trim()
+      .min(1, "Lokasi berita tidak boleh kosong"),
+    kategori_id: z.coerce.number().min(1, "Kategori berita harus dipilih"),
+    deskripsi: z.string()
+      .trim()
+      .min(1, "Deskripsi/isi berita tidak boleh kosong")
+      .refine(val => {
+        const cleanText = val.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+        const hasMedia = val.includes('<img') || val.includes('<iframe') || val.includes('<video');
+        return cleanText.length > 0 || hasMedia;
+      }, "Deskripsi/isi berita tidak boleh kosong"),
+    foto: z.any().optional()
+  }).superRefine((data, ctx) => {
+    // Foto wajib diunggah untuk berita baru
+    if (!editId) {
+      if (!data.foto) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Foto berita wajib diunggah",
+          path: ["foto"]
+        });
+        return;
+      }
+    }
+
+    if (data.foto) {
+      const file = data.foto as File;
+      // Validasi ukuran (maksimal 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Ukuran foto terlalu besar. Maksimal 5 MB.",
+          path: ["foto"]
+        });
+      }
+      // Validasi jenis file gambar
+      const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+      if (!allowedTypes.includes(file.type)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)",
+          path: ["foto"]
+        });
+      }
+    }
+  });
+
+  const { form, errors, enhance, reset, validateForm } = superForm(
+    {
+      judul: "",
+      lokasi: "",
+      kategori_id: 0,
+      deskripsi: "",
+      foto: null as File | null
+    },
+    {
+      SPA: true,
+      validators: zod4(schema),
+      async onUpdate({ form: f }) {
+        if (!f.valid) {
+          const errorMsgs = Object.values(f.errors).flat().filter(Boolean);
+          if (errorMsgs.length > 0) {
+            toast.error(errorMsgs[0] as string);
+          } else {
+            toast.error("Mohon lengkapi seluruh kolom yang wajib diisi!");
+          }
+          return;
+        }
+        isSubmitting = true;
+
+        try {
+          const formData = new FormData();
+          formData.append("judul", f.data.judul);
+          formData.append("lokasi", f.data.lokasi);
+          formData.append("kategori_id", f.data.kategori_id.toString());
+          formData.append("deskripsi", f.data.deskripsi);
+          if (f.data.foto) {
+            formData.append("foto", f.data.foto);
+          }
+
+          if (editId) {
+            await fetchAPI(`/admin/berita/${editId}`, {
+              method: "PUT",
+              body: formData,
+            });
+            toast.success("Berita berhasil diperbarui!");
+          } else {
+            await fetchAPI("/admin/berita", {
+              method: "POST",
+              body: formData,
+            });
+            toast.success("Berita berhasil ditambahkan!");
+          }
+          closeModal();
+          loadData();
+        } catch (error: any) {
+          toast.error(error.message || "Gagal menyimpan berita");
+        } finally {
+          isSubmitting = false;
+        }
+      }
+    }
+  );
 
   async function loadData() {
     loading = true;
@@ -40,79 +150,54 @@
     loadData();
   });
 
+  onDestroy(() => {
+    if (fotoPreviewUrl) {
+      URL.revokeObjectURL(fotoPreviewUrl);
+    }
+  });
+
   function openModal(berita: any = null) {
+    reset();
+    if (fotoPreviewUrl) {
+      URL.revokeObjectURL(fotoPreviewUrl);
+      fotoPreviewUrl = "";
+    }
     if (berita) {
       editId = berita.id;
-      formJudul = berita.judul;
-      formLokasi = berita.lokasi;
-      formKategori = berita.kategori_id;
-      formDeskripsi = berita.deskripsi;
+      $form.judul = berita.judul;
+      $form.lokasi = berita.lokasi;
+      $form.kategori_id = berita.kategori_id;
+      $form.deskripsi = berita.deskripsi;
       existingFotoUrl = berita.foto;
     } else {
       editId = null;
-      formJudul = "";
-      formLokasi = "";
-      formKategori = "";
-      formDeskripsi = "";
+      $form.judul = "";
+      $form.lokasi = "";
+      $form.kategori_id = 0;
+      $form.deskripsi = "";
       existingFotoUrl = "";
     }
-    formFoto = null;
+    $form.foto = null;
     isModalOpen = true;
   }
 
   function closeModal() {
     isModalOpen = false;
+    reset();
+    if (fotoPreviewUrl) {
+      URL.revokeObjectURL(fotoPreviewUrl);
+      fotoPreviewUrl = "";
+    }
   }
 
   function handleFileChange(event: any) {
     const file = event.target.files[0];
     if (file) {
-      formFoto = file;
-    }
-  }
-
-  async function handleSubmit() {
-    const isDeskripsiEmpty = !formDeskripsi || formDeskripsi.trim() === "" || formDeskripsi.trim() === "<p></p>";
-    if (!formJudul || !formLokasi || !formKategori || isDeskripsiEmpty) {
-      toast.error("Mohon lengkapi semua field!");
-      return;
-    }
-
-    if (formFoto && formFoto.size > 5 * 1024 * 1024) {
-      toast.error("Ukuran foto terlalu besar. Maksimal 5 MB.");
-      return;
-    }
-
-    isSubmitting = true;
-    try {
-      const formData = new FormData();
-      formData.append("judul", formJudul);
-      formData.append("lokasi", formLokasi);
-      formData.append("kategori_id", formKategori.toString());
-      formData.append("deskripsi", formDeskripsi);
-      if (formFoto) {
-        formData.append("foto", formFoto);
+      $form.foto = file;
+      if (fotoPreviewUrl) {
+        URL.revokeObjectURL(fotoPreviewUrl);
       }
-
-      if (editId) {
-        await fetchAPI(`/admin/berita/${editId}`, {
-          method: "PUT",
-          body: formData,
-        });
-        toast.success("Berita berhasil diperbarui!");
-      } else {
-        await fetchAPI("/admin/berita", {
-          method: "POST",
-          body: formData,
-        });
-        toast.success("Berita berhasil ditambahkan!");
-      }
-      closeModal();
-      loadData();
-    } catch (error: any) {
-      toast.error(error.message || "Gagal menyimpan berita");
-    } finally {
-      isSubmitting = false;
+      fotoPreviewUrl = URL.createObjectURL(file);
     }
   }
 
@@ -142,7 +227,7 @@
     </p>
   </div>
   <button
-    on:click={() => openModal()}
+    onclick={() => openModal()}
     class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
   >
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -239,12 +324,12 @@
                 class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium"
               >
                 <button
-                  on:click={() => openModal(berita)}
+                  onclick={() => openModal(berita)}
                   class="text-indigo-600 hover:text-indigo-900 mr-4"
                   >Edit</button
                 >
                 <button
-                  on:click={() => handleDelete(berita.id)}
+                  onclick={() => handleDelete(berita.id)}
                   class="text-red-600 hover:text-red-900">Hapus</button
                 >
               </td>
@@ -270,7 +355,7 @@
       <div
         class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity"
         aria-hidden="true"
-        on:click={closeModal}
+        onclick={closeModal}
       ></div>
       <span
         class="hidden sm:inline-block sm:align-middle sm:h-screen"
@@ -279,7 +364,7 @@
       <div
         class="relative z-10 inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full"
       >
-        <form on:submit|preventDefault={handleSubmit}>
+        <form use:enhance method="POST" enctype="multipart/form-data">
           <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
             <h3
               class="text-xl leading-6 font-semibold text-slate-900 mb-6 border-b pb-4"
@@ -298,10 +383,13 @@
                 <input
                   type="text"
                   id="judul"
-                  bind:value={formJudul}
-                  required
-                  class="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  name="judul"
+                  bind:value={$form.judul}
+                  class="mt-1 block w-full border {$errors.judul ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
                 />
+                {#if $errors.judul}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.judul}</p>
+                {/if}
               </div>
 
               <div>
@@ -312,15 +400,18 @@
                 >
                 <select
                   id="kategori"
-                  bind:value={formKategori}
-                  required
-                  class="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white"
+                  name="kategori_id"
+                  bind:value={$form.kategori_id}
+                  class="mt-1 block w-full border {$errors.kategori_id ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
                 >
-                  <option value="" disabled>Pilih Kategori...</option>
+                  <option value={0} disabled>Pilih Kategori...</option>
                   {#each kategoris as kat}
                     <option value={kat.id}>{kat.nama}</option>
                   {/each}
                 </select>
+                {#if $errors.kategori_id}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.kategori_id}</p>
+                {/if}
               </div>
 
               <div>
@@ -331,11 +422,14 @@
                 <input
                   type="text"
                   id="lokasi"
-                  bind:value={formLokasi}
-                  required
+                  name="lokasi"
+                  bind:value={$form.lokasi}
                   placeholder="Misal: Jakarta, Indonesia"
-                  class="mt-1 block w-full border border-slate-300 rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  class="mt-1 block w-full border {$errors.lokasi ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
                 />
+                {#if $errors.lokasi}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.lokasi}</p>
+                {/if}
               </div>
 
               <div class="col-span-2">
@@ -344,20 +438,29 @@
                   class="block text-sm font-medium text-slate-700"
                   >Upload Foto</label
                 >
-                {#if existingFotoUrl && !formFoto}
+                {#if fotoPreviewUrl}
+                  <div class="mt-2 mb-2">
+                    <img
+                      src={fotoPreviewUrl}
+                      alt="Preview"
+                      class="h-32 rounded border border-slate-200 object-cover"
+                    />
+                  </div>
+                {:else if existingFotoUrl}
                   <div class="mt-2 mb-2">
                     <img
                       src="{API_URL}{existingFotoUrl}"
                       alt="Preview"
-                      class="h-32 rounded border border-slate-200"
+                      class="h-32 rounded border border-slate-200 object-cover"
                     />
                   </div>
                 {/if}
                 <input
                   type="file"
                   id="foto"
+                  name="foto"
                   accept="image/*"
-                  on:change={handleFileChange}
+                  onchange={handleFileChange}
                   class="mt-1 block w-full text-sm text-slate-500
 									file:mr-4 file:py-2 file:px-4
 									file:rounded-full file:border-0
@@ -366,6 +469,9 @@
 									hover:file:bg-indigo-100 transition-colors
 									"
                 />
+                {#if $errors.foto}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.foto}</p>
+                {/if}
               </div>
 
               <div class="col-span-2 relative">
@@ -374,12 +480,15 @@
                   class="block text-sm font-medium text-slate-700 mb-1"
                   >Isi Berita</label
                 >
-                <LexicalEditor bind:value={formDeskripsi} />
+                <LexicalEditor bind:value={$form.deskripsi} />
                 <textarea
+                  name="deskripsi"
                   class="absolute w-0 h-0 opacity-0 pointer-events-none"
-                  required
-                  bind:value={formDeskripsi}
+                  bind:value={$form.deskripsi}
                 ></textarea>
+                {#if $errors.deskripsi}
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.deskripsi}</p>
+                {/if}
               </div>
             </div>
           </div>
@@ -395,7 +504,7 @@
             </button>
             <button
               type="button"
-              on:click={closeModal}
+              onclick={closeModal}
               class="mt-3 w-full inline-flex justify-center rounded-lg border border-slate-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition-colors"
             >
               Batal

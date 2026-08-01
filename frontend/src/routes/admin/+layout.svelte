@@ -46,7 +46,7 @@
 			</a>
 		</div>
 		<div class="absolute bottom-0 w-full p-4 border-t border-slate-200">
-			<button on:click={handleLogout} class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-600 font-medium hover:bg-red-50 transition-colors w-full">
+			<button onclick={handleLogout} class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-600 font-medium hover:bg-red-50 transition-colors w-full">
 				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
 				Logout
 			</button>
@@ -60,7 +60,7 @@
 			<div class="flex items-center gap-2">
 				<div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xl">P</div>
 			</div>
-			<button class="p-2 text-slate-500 rounded-lg hover:bg-slate-50" on:click={() => isMenuOpen = !isMenuOpen}>
+			<button class="p-2 text-slate-500 rounded-lg hover:bg-slate-50" aria-label="Toggle Menu" onclick={() => isMenuOpen = !isMenuOpen}>
 				<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
 			</button>
 		</header>
@@ -70,7 +70,7 @@
 				<a href="/admin" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Dashboard</a>
 				<a href="/admin/kategori" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Kategori</a>
 				<a href="/admin/berita" class="block px-3 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Berita</a>
-				<button on:click={handleLogout} class="block w-full text-left px-3 py-2 rounded-lg text-red-600 font-medium hover:bg-red-50">Logout</button>
+				<button onclick={handleLogout} class="block w-full text-left px-3 py-2 rounded-lg text-red-600 font-medium hover:bg-red-50">Logout</button>
 			</div>
 		{/if}
 
