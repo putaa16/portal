@@ -1,0 +1,15 @@
+{
+  "name": "Plugin Berita",
+  "id": "com.portal.plugin-berita",
+  "version": "1.0.0",
+  "author": "Portal Developer",
+  "routes": [
+    "/admin/berita",
+    "/admin/kategori"
+  ],
+  "api_routes": [
+    "/api/berita",
+    "/api/kategori",
+    "/api/upload"
+  ]
+}

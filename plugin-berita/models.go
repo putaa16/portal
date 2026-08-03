@@ -1,4 +1,4 @@
-package newsplugin
+package main
 
 import (
 	"time"
