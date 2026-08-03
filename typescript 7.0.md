@@ -21,7 +21,7 @@ CRUD
                 Foto
                 Deskripsi -->
 
-3. Kelola Akreditasi
+3. Kelola Dokumen Akreditasi
 CRUD
 Create -> Judul
          Upload Foto

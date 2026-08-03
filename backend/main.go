@@ -13,12 +13,19 @@ import (
 )
 
 func main() {
-	// Pastikan folder uploads ada
-	os.MkdirAll("./uploads", os.ModePerm)
-	os.MkdirAll("./uploads/documents", os.ModePerm)
+	// Pastikan folder uploads dan subdirektori ada
+	os.MkdirAll("./uploads/images/news", os.ModePerm)
+	os.MkdirAll("./uploads/images/agenda", os.ModePerm)
+	os.MkdirAll("./uploads/images/partners", os.ModePerm)
+	os.MkdirAll("./uploads/images/accreditations", os.ModePerm)
+	os.MkdirAll("./uploads/documents/contracts", os.ModePerm)
+	os.MkdirAll("./uploads/documents/accreditations", os.ModePerm)
 
 	// Inisialisasi koneksi DB dan Migrasi
 	database.Connect()
+
+	// Jalankan migrasi path uploads jika ada data lama
+	database.MigrateUploadPaths(database.DB)
 
 	app := fiber.New(fiber.Config{
 		BodyLimit: 15 * 1024 * 1024, // 15 MB
@@ -65,6 +72,8 @@ func main() {
 	app.Get("/agenda/:id", handlers.GetAgendaByID)
 	app.Get("/mitra", handlers.GetAllMitra)
 	app.Get("/mitra/:id", handlers.GetMitraByID)
+	app.Get("/akreditasi", handlers.GetAllAkreditasi)
+	app.Get("/akreditasi/:id", handlers.GetAkreditasiByID)
 
 	// Rute Admin (Protected)
 	admin := app.Group("/admin", middleware.Protected())
@@ -93,6 +102,13 @@ func main() {
 	admin.Post("/mitra", handlers.CreateMitra)
 	admin.Put("/mitra/:id", handlers.UpdateMitra)
 	admin.Delete("/mitra/:id", handlers.DeleteMitra)
+
+	// Akreditasi CRUD
+	admin.Get("/akreditasi", handlers.GetAllAkreditasi)
+	admin.Get("/akreditasi/:id", handlers.GetAkreditasiByID)
+	admin.Post("/akreditasi", handlers.CreateAkreditasi)
+	admin.Put("/akreditasi/:id", handlers.UpdateAkreditasi)
+	admin.Delete("/akreditasi/:id", handlers.DeleteAkreditasi)
 
 	log.Fatal(app.Listen(":3000"))
 

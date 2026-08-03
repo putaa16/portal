@@ -90,23 +90,23 @@ func CreateMitra(c *fiber.Ctx) error {
 
 	// Simpan Logo
 	logoFilename := fmt.Sprintf("%d-logo-%s", time.Now().Unix(), logoFile.Filename)
-	if err := c.SaveFile(logoFile, "./uploads/"+logoFilename); err != nil {
+	if err := c.SaveFile(logoFile, "./uploads/images/partners/"+logoFilename); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas logo ke server"})
 	}
 
 	// Simpan Bukti Dokumen
 	dokumenFilename := fmt.Sprintf("%d-dok-%s", time.Now().Unix(), dokumenFile.Filename)
-	if err := c.SaveFile(dokumenFile, "./uploads/documents/"+dokumenFilename); err != nil {
+	if err := c.SaveFile(dokumenFile, "./uploads/documents/contracts/"+dokumenFilename); err != nil {
 		// Hapus logo yang terlanjur terunggah
-		deleteLocalFile("/uploads/" + logoFilename)
+		deleteLocalFile("/uploads/images/partners/" + logoFilename)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas dokumen ke server"})
 	}
 
 	mitra.Nama = nama
 	mitra.MasaAktif = masaAktif
 	mitra.Status = status
-	mitra.Logo = "/uploads/" + logoFilename
-	mitra.BuktiDokumen = "/uploads/documents/" + dokumenFilename
+	mitra.Logo = "/uploads/images/partners/" + logoFilename
+	mitra.BuktiDokumen = "/uploads/documents/contracts/" + dokumenFilename
 
 	if err := database.DB.Create(&mitra).Error; err != nil {
 		fmt.Printf("GORM Create Mitra Error: %v\n", err)
@@ -214,10 +214,10 @@ func UpdateMitra(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format file logo tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)"})
 		}
 		logoFilename := fmt.Sprintf("%d-logo-%s", time.Now().Unix(), logoFile.Filename)
-		if err := c.SaveFile(logoFile, "./uploads/"+logoFilename); err != nil {
+		if err := c.SaveFile(logoFile, "./uploads/images/partners/"+logoFilename); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas logo baru ke server"})
 		}
-		newLogo = "/uploads/" + logoFilename
+		newLogo = "/uploads/images/partners/" + logoFilename
 	}
 
 	// Handle optional document update
@@ -238,13 +238,13 @@ func UpdateMitra(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format bukti dokumen tidak didukung. Harap unggah berkas (pdf)"})
 		}
 		dokumenFilename := fmt.Sprintf("%d-dok-%s", time.Now().Unix(), dokumenFile.Filename)
-		if err := c.SaveFile(dokumenFile, "./uploads/documents/"+dokumenFilename); err != nil {
+		if err := c.SaveFile(dokumenFile, "./uploads/documents/contracts/"+dokumenFilename); err != nil {
 			if newLogo != "" {
 				deleteLocalFile(newLogo)
 			}
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas dokumen baru ke server"})
 		}
-		newDokumen = "/uploads/documents/" + dokumenFilename
+		newDokumen = "/uploads/documents/contracts/" + dokumenFilename
 	}
 
 	// Assign values

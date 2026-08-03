@@ -3,16 +3,46 @@
 	import { fetchAPI, API_URL } from '$lib/api';
 
 	let beritaList: any[] = [];
+	let kategoris: any[] = [];
 	let loading = true;
+	let search = '';
+	let selectedKategori = 0;
+	let debounceTimer: any;
 
-	onMount(async () => {
+	async function loadBerita() {
+		loading = true;
 		try {
-			beritaList = await fetchAPI('/berita');
+			let url = '/berita?';
+			const params = [];
+			if (search.trim()) {
+				params.push(`search=${encodeURIComponent(search.trim())}`);
+			}
+			if (selectedKategori > 0) {
+				params.push(`kategori_id=${selectedKategori}`);
+			}
+			url += params.join('&');
+			beritaList = await fetchAPI(url);
 		} catch (error) {
 			console.error(error);
 		} finally {
 			loading = false;
 		}
+	}
+
+	function handleSearchInput() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => {
+			loadBerita();
+		}, 300);
+	}
+
+	onMount(async () => {
+		try {
+			kategoris = await fetchAPI('/kategori');
+		} catch (error) {
+			console.error(error);
+		}
+		await loadBerita();
 	});
 
 	function stripHTML(html: string) {
@@ -45,6 +75,9 @@
 						<a href="/mitra" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
 							Mitra
 						</a>
+						<a href="/akreditasi" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
+							Akreditasi
+						</a>
 					</div>
 				</div>
 				<div class="flex items-center">
@@ -65,9 +98,55 @@
 			</p>
 		</div>
 
+		<!-- Search & Filter Controls -->
+		<div class="mb-8 flex flex-col md:flex-row gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+			<div class="flex-1 relative">
+				<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+					<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+				</div>
+				<input 
+					type="text" 
+					placeholder="Cari berita berdasarkan judul, isi, atau lokasi..." 
+					bind:value={search} 
+					on:input={handleSearchInput}
+					class="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+				/>
+			</div>
+			<div class="w-full md:w-64">
+				<select 
+					bind:value={selectedKategori} 
+					on:change={loadBerita}
+					class="block w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+				>
+					<option value={0}>Semua Kategori</option>
+					{#each kategoris as kat}
+						<option value={kat.id}>{kat.nama}</option>
+					{/each}
+				</select>
+			</div>
+		</div>
+
 		{#if loading}
-			<div class="flex justify-center items-center py-20">
-				<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+				{#each Array(6) as _}
+					<div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col animate-pulse">
+						<div class="h-56 bg-slate-200"></div>
+						<div class="p-6 flex-1 flex flex-col gap-4">
+							<div class="flex gap-4">
+								<div class="h-4 bg-slate-200 rounded w-1/3"></div>
+								<div class="h-4 bg-slate-200 rounded w-1/4"></div>
+							</div>
+							<div class="h-6 bg-slate-200 rounded w-3/4"></div>
+							<div class="space-y-2 flex-1">
+								<div class="h-4 bg-slate-200 rounded w-full"></div>
+								<div class="h-4 bg-slate-200 rounded w-5/6"></div>
+							</div>
+							<div class="pt-4 border-t border-slate-100">
+								<div class="h-4 bg-slate-200 rounded w-1/3"></div>
+							</div>
+						</div>
+					</div>
+				{/each}
 			</div>
 		{:else if beritaList.length === 0}
 			<div class="text-center py-20 bg-white rounded-2xl shadow-sm border border-slate-100">

@@ -51,7 +51,16 @@ type Mitra struct {
 	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
+type Akreditasi struct {
+	ID        uint      `gorm:"primaryKey" json:"id" form:"id"`
+	Judul     string    `gorm:"not null" json:"judul" form:"judul"`
+	Jenis     string    `gorm:"not null" json:"jenis" form:"jenis"` // "foto" atau "dokumen"
+	File      string    `gorm:"not null" json:"file"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&Admin{}, &Kategori{}, &Berita{}, &Agenda{}, &Mitra{})
+	return db.AutoMigrate(&Admin{}, &Kategori{}, &Berita{}, &Agenda{}, &Mitra{}, &Akreditasi{})
 }
 

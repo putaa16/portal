@@ -19,6 +19,12 @@
   let dokumenFileName = $state("");
   let dokumenPreviewUrl = $state("");
 
+  // File Compression States
+  let isFileTooLarge = $state(false);
+  let selectedFileSize = $state(0);
+  let rawFile = $state<File | null>(null);
+  let isCompressing = $state(false);
+
   // Zod validation schema
   const schema = z.object({
     nama: z.string()
@@ -194,6 +200,11 @@
       dokumenPreviewUrl = "";
     }
     dokumenFileName = "";
+    isFileTooLarge = false;
+    selectedFileSize = 0;
+    rawFile = null;
+    isCompressing = false;
+
     if (mitra) {
       editId = mitra.id;
       $form.nama = mitra.nama;
@@ -230,16 +241,98 @@
       dokumenPreviewUrl = "";
     }
     dokumenFileName = "";
+    isFileTooLarge = false;
+    selectedFileSize = 0;
+    rawFile = null;
+    isCompressing = false;
   }
 
   function handleLogoChange(event: any) {
     const file = event.target.files[0];
     if (file) {
+      rawFile = file;
+      selectedFileSize = file.size;
+      isFileTooLarge = file.size > 5 * 1024 * 1024;
+
       $form.logo = file;
       if (logoPreviewUrl) {
         URL.revokeObjectURL(logoPreviewUrl);
       }
       logoPreviewUrl = URL.createObjectURL(file);
+    }
+  }
+
+  function compressImage(file: File, maxDim: number, quality: number): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event: any) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Gagal membuat context canvas"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.substring(0, file.name.lastIndexOf('.')) + ".jpg", {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error("Gagal mengekspor blob"));
+              }
+            },
+            "image/jpeg",
+            quality
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  }
+
+  async function compressImageLocally() {
+    if (!rawFile) return;
+    isCompressing = true;
+    try {
+      const compressed = await compressImage(rawFile, 1200, 0.8);
+      $form.logo = compressed;
+      selectedFileSize = compressed.size;
+      isFileTooLarge = compressed.size > 5 * 1024 * 1024;
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+      }
+      logoPreviewUrl = URL.createObjectURL(compressed);
+      toast.success(`Logo berhasil dikompres! Ukuran baru: ${(compressed.size / (1024 * 1024)).toFixed(2)} MB`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal mengompres logo");
+    } finally {
+      isCompressing = false;
     }
   }
 
@@ -500,7 +593,22 @@
             class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
           />
           <p class="text-slate-400 text-xs mt-1">Format gambar (jpg, png, webp, gif). Maksimal 5 MB.</p>
-          
+          {#if isFileTooLarge}
+            <div class="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+              <div class="text-xs text-amber-800">
+                <p class="font-semibold">Ukuran file terlalu besar!</p>
+                <p>File terpilih: <span class="font-medium">{(selectedFileSize / (1024 * 1024)).toFixed(2)} MB</span> (Maksimum 5 MB).</p>
+              </div>
+              <button
+                type="button"
+                onclick={compressImageLocally}
+                disabled={isCompressing}
+                class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-sm transition-colors disabled:opacity-50"
+              >
+                {isCompressing ? "Mengompres..." : "Kompres Otomatis"}
+              </button>
+            </div>
+          {/if}
           {#if logoPreviewUrl}
             <div class="mt-2">
               <span class="text-xs text-slate-500">Pratinjau Logo Baru:</span>

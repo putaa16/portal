@@ -104,15 +104,16 @@ func CreateBerita(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)"})
 	}
 
-	filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
-	if err := c.SaveFile(file, "./uploads/"+filename); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas foto ke server"})
+	jpgFilename := GetJPGFilename(fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename))
+	destPath := "./uploads/images/news/" + jpgFilename
+	if err := CompressAndSaveMultipartImage(file, destPath); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan dan mengompresi foto"})
 	}
-	berita.Foto = "/uploads/" + filename
+	berita.Foto = "/uploads/images/news/" + jpgFilename
 
 	if err := database.DB.Create(&berita).Error; err != nil {
 		fmt.Printf("GORM Create Error: %v\n", err)
-		// Hapus file yang sudah terlanjur diupload jika DB gagal
+		// Hapus file jika DB gagal
 		deleteLocalFile(berita.Foto)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Gagal menyimpan berita: %v", err)})
 	}
@@ -121,7 +122,6 @@ func CreateBerita(c *fiber.Ctx) error {
 }
 
 func GetAllBerita(c *fiber.Ctx) error {
-	var beritas []models.Berita
 	isAdmin := strings.HasPrefix(c.Path(), "/admin")
 
 	query := database.DB.Preload("Kategori")
@@ -129,7 +129,83 @@ func GetAllBerita(c *fiber.Ctx) error {
 		query = query.Where("status = ?", "published")
 	}
 
-	query.Order("created_at desc").Find(&beritas)
+	// 1. Filter Kategori
+	kategoriID := c.QueryInt("kategori_id")
+	if kategoriID > 0 {
+		query = query.Where("kategori_id = ?", kategoriID)
+	}
+
+	// 2. Filter Status (Hanya berlaku untuk admin)
+	if isAdmin {
+		status := strings.TrimSpace(c.Query("status"))
+		if status != "" {
+			query = query.Where("status = ?", status)
+		}
+	}
+
+	// 3. Pencarian Kata Kunci (search)
+	search := strings.TrimSpace(c.Query("search"))
+	if search != "" {
+		// Cari di judul, deskripsi, atau lokasi
+		query = query.Where("judul LIKE ? OR deskripsi LIKE ? OR lokasi LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+	}
+
+	// Order by default
+	query = query.Order("created_at desc")
+
+	// 4. Pagination (Hanya jika query param 'page' dikirim dan > 0)
+	page := c.QueryInt("page")
+	if page > 0 {
+		limit := c.QueryInt("limit")
+		if limit <= 0 {
+			limit = 10 // default limit
+		}
+		offset := (page - 1) * limit
+
+		var total int64
+		// Hitung total data yang cocok dengan filter
+		var countQuery = database.DB.Model(&models.Berita{})
+		if !isAdmin {
+			countQuery = countQuery.Where("status = ?", "published")
+		}
+		if kategoriID > 0 {
+			countQuery = countQuery.Where("kategori_id = ?", kategoriID)
+		}
+		if isAdmin {
+			status := strings.TrimSpace(c.Query("status"))
+			if status != "" {
+				countQuery = countQuery.Where("status = ?", status)
+			}
+		}
+		if search != "" {
+			countQuery = countQuery.Where("judul LIKE ? OR deskripsi LIKE ? OR lokasi LIKE ?", "%"+search+"%", "%"+search+"%", "%"+search+"%")
+		}
+		countQuery.Count(&total)
+
+		var beritas []models.Berita
+		if err := query.Limit(limit).Offset(offset).Find(&beritas).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal mengambil data berita"})
+		}
+
+		totalPages := int(total) / limit
+		if int(total)%limit != 0 {
+			totalPages++
+		}
+
+		return c.JSON(fiber.Map{
+			"data":        beritas,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+	}
+
+	// Jika tidak meminta pagination, kembalikan list array langsung untuk backward compatibility
+	var beritas []models.Berita
+	if err := query.Find(&beritas).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal mengambil data berita"})
+	}
 	return c.JSON(beritas)
 }
 
@@ -212,16 +288,17 @@ func UpdateBerita(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)"})
 		}
 
-		filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
-		if err := c.SaveFile(file, "./uploads/"+filename); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas foto ke server"})
+		jpgFilename := GetJPGFilename(fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename))
+		destPath := "./uploads/images/news/" + jpgFilename
+		if err := CompressAndSaveMultipartImage(file, destPath); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan dan mengompresi foto"})
 		}
 
 		// Hapus foto lama jika ada sebelum memperbarui dengan foto baru
 		if oldFoto != "" {
 			deleteLocalFile(oldFoto)
 		}
-		berita.Foto = "/uploads/" + filename
+		berita.Foto = "/uploads/images/news/" + jpgFilename
 	} else {
 		// Jika tidak ada foto baru, pastikan foto lama tetap dipertahankan
 		berita.Foto = oldFoto
@@ -258,12 +335,12 @@ func UploadMedia(c *fiber.Ctx) error {
 	}
 
 	filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
-	if err := c.SaveFile(file, "./uploads/"+filename); err != nil {
+	if err := c.SaveFile(file, "./uploads/images/news/"+filename); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan file"})
 	}
 
 	return c.JSON(fiber.Map{
-		"url": "/uploads/" + filename,
+		"url": "/uploads/images/news/" + filename,
 	})
 }
 

@@ -18,60 +18,90 @@
   let existingFotoUrl = $state("");
   let fotoPreviewUrl = $state("");
 
-  // Zod validation schema
-  const schema = z.object({
-    judul: z.string()
-      .trim()
-      .min(1, "Judul berita tidak boleh kosong")
-      .min(5, "Judul berita minimal harus terdiri dari 5 karakter"),
-    lokasi: z.string()
-      .trim()
-      .min(1, "Lokasi berita tidak boleh kosong"),
-    kategori_id: z.coerce.number().min(1, "Kategori berita harus dipilih"),
-    deskripsi: z.string()
-      .trim()
-      .min(1, "Deskripsi/isi berita tidak boleh kosong")
-      .refine(val => {
-        const cleanText = val.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-        const hasMedia = val.includes('<img') || val.includes('<iframe') || val.includes('<video');
-        return cleanText.length > 0 || hasMedia;
-      }, "Deskripsi/isi berita tidak boleh kosong"),
-    status: z.enum(["draft", "published"]),
-    foto: z.any().optional()
-  }).superRefine((data, ctx) => {
-    // Foto wajib diunggah untuk berita baru
-    if (!editId) {
-      if (!data.foto) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Foto berita wajib diunggah",
-          path: ["foto"]
-        });
-        return;
-      }
-    }
+  // Pagination & Filter States
+  let search = $state("");
+  let selectedKategori = $state(0);
+  let selectedStatus = $state("");
+  let page = $state(1);
+  let limit = $state(5);
+  let totalItems = $state(0);
+  let totalPages = $state(1);
 
-    if (data.foto) {
-      const file = data.foto as File;
-      // Validasi ukuran (maksimal 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Ukuran foto terlalu besar. Maksimal 5 MB.",
-          path: ["foto"]
-        });
+  // File Compression States
+  let isFileTooLarge = $state(false);
+  let selectedFileSize = $state(0);
+  let rawFile = $state<File | null>(null);
+  let isCompressing = $state(false);
+
+  // Zod validation schema
+  const schema = z
+    .object({
+      judul: z
+        .string()
+        .trim()
+        .min(1, "Judul berita tidak boleh kosong")
+        .min(5, "Judul berita minimal harus terdiri dari 5 karakter"),
+      lokasi: z.string().trim().min(1, "Lokasi berita tidak boleh kosong"),
+      kategori_id: z.coerce.number().min(1, "Kategori berita harus dipilih"),
+      deskripsi: z
+        .string()
+        .trim()
+        .min(1, "Deskripsi/isi berita tidak boleh kosong")
+        .refine((val) => {
+          const cleanText = val
+            .replace(/<[^>]*>/g, "")
+            .replace(/&nbsp;/g, " ")
+            .trim();
+          const hasMedia =
+            val.includes("<img") ||
+            val.includes("<iframe") ||
+            val.includes("<video");
+          return cleanText.length > 0 || hasMedia;
+        }, "Deskripsi/isi berita tidak boleh kosong"),
+      status: z.enum(["draft", "published"]),
+      foto: z.any().optional(),
+    })
+    .superRefine((data, ctx) => {
+      // Foto wajib diunggah untuk berita baru
+      if (!editId) {
+        if (!data.foto) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Foto berita wajib diunggah",
+            path: ["foto"],
+          });
+          return;
+        }
       }
-      // Validasi jenis file gambar
-      const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
-      if (!allowedTypes.includes(file.type)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)",
-          path: ["foto"]
-        });
+
+      if (data.foto) {
+        const file = data.foto as File;
+        // Validasi ukuran (maksimal 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Ukuran foto terlalu besar. Maksimal 5 MB.",
+            path: ["foto"],
+          });
+        }
+        // Validasi jenis file gambar
+        const allowedTypes = [
+          "image/jpeg",
+          "image/jpg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+        ];
+        if (!allowedTypes.includes(file.type)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)",
+            path: ["foto"],
+          });
+        }
       }
-    }
-  });
+    });
 
   const { form, errors, enhance, reset, validateForm } = superForm(
     {
@@ -80,7 +110,7 @@
       kategori_id: 0,
       deskripsi: "",
       status: "published" as "draft" | "published",
-      foto: null as File | null
+      foto: null as File | null,
     },
     {
       SPA: true,
@@ -128,24 +158,65 @@
         } finally {
           isSubmitting = false;
         }
-      }
-    }
+      },
+    },
   );
 
   async function loadData() {
     loading = true;
     try {
+      let url = `/admin/berita?page=${page}&limit=${limit}`;
+      if (search.trim()) {
+        url += `&search=${encodeURIComponent(search.trim())}`;
+      }
+      if (selectedKategori > 0) {
+        url += `&kategori_id=${selectedKategori}`;
+      }
+      if (selectedStatus) {
+        url += `&status=${selectedStatus}`;
+      }
+
       const [resBerita, resKat] = await Promise.all([
-        fetchAPI("/admin/berita"),
+        fetchAPI(url),
         fetchAPI("/kategori"),
       ]);
-      beritas = resBerita;
+
+      if (resBerita && resBerita.data) {
+        beritas = resBerita.data;
+        totalItems = resBerita.total;
+        totalPages = resBerita.total_pages;
+      } else {
+        beritas = resBerita || [];
+        totalItems = beritas.length;
+        totalPages = 1;
+      }
       kategoris = resKat;
     } catch (error) {
       console.error(error);
       toast.error("Gagal memuat data");
     } finally {
       loading = false;
+    }
+  }
+
+  function handleFilterChange() {
+    page = 1;
+    loadData();
+  }
+
+  let searchTimer: any;
+  function handleSearchInput(e: any) {
+    search = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      handleFilterChange();
+    }, 300);
+  }
+
+  function handlePageChange(newPage: number) {
+    if (newPage >= 1 && newPage <= totalPages) {
+      page = newPage;
+      loadData();
     }
   }
 
@@ -165,6 +236,11 @@
       URL.revokeObjectURL(fotoPreviewUrl);
       fotoPreviewUrl = "";
     }
+    isFileTooLarge = false;
+    selectedFileSize = 0;
+    rawFile = null;
+    isCompressing = false;
+
     if (berita) {
       editId = berita.id;
       $form.judul = berita.judul;
@@ -198,11 +274,99 @@
   function handleFileChange(event: any) {
     const file = event.target.files[0];
     if (file) {
+      rawFile = file;
+      selectedFileSize = file.size;
+      isFileTooLarge = file.size > 5 * 1024 * 1024;
+
       $form.foto = file;
       if (fotoPreviewUrl) {
         URL.revokeObjectURL(fotoPreviewUrl);
       }
       fotoPreviewUrl = URL.createObjectURL(file);
+    }
+  }
+
+  function compressImage(
+    file: File,
+    maxDim: number,
+    quality: number,
+  ): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event: any) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Gagal membuat context canvas"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File(
+                  [blob],
+                  file.name.substring(0, file.name.lastIndexOf(".")) + ".jpg",
+                  {
+                    type: "image/jpeg",
+                    lastModified: Date.now(),
+                  },
+                );
+                resolve(compressedFile);
+              } else {
+                reject(new Error("Gagal mengekspor blob"));
+              }
+            },
+            "image/jpeg",
+            quality,
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  }
+
+  async function compressImageLocally() {
+    if (!rawFile) return;
+    isCompressing = true;
+    try {
+      const compressed = await compressImage(rawFile, 1200, 0.8);
+      $form.foto = compressed;
+      selectedFileSize = compressed.size;
+      isFileTooLarge = compressed.size > 5 * 1024 * 1024;
+      if (fotoPreviewUrl) {
+        URL.revokeObjectURL(fotoPreviewUrl);
+      }
+      fotoPreviewUrl = URL.createObjectURL(compressed);
+      toast.success(
+        `Gambar berhasil dikompres! Ukuran baru: ${(compressed.size / (1024 * 1024)).toFixed(2)} MB`,
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal mengompres gambar");
+    } finally {
+      isCompressing = false;
     }
   }
 
@@ -250,6 +414,76 @@
 <div
   class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
 >
+  <!-- Filter & Search Panel -->
+  <div
+    class="bg-slate-50 p-4 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-4"
+  >
+    <div class="relative sm:col-span-5">
+      <div
+        class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400"
+      >
+        <svg
+          class="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          ><path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          ></path></svg
+        >
+      </div>
+      <input
+        type="text"
+        placeholder="Cari judul atau lokasi..."
+        value={search}
+        oninput={handleSearchInput}
+        class="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+
+    <div class="sm:col-span-3">
+      <select
+        bind:value={selectedKategori}
+        onchange={handleFilterChange}
+        class="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option value={0}>Semua Kategori</option>
+        {#each kategoris as kat}
+          <option value={kat.id}>{kat.nama}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div class="sm:col-span-2">
+      <select
+        bind:value={selectedStatus}
+        onchange={handleFilterChange}
+        class="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option value="">Semua Status</option>
+        <option value="published">Published</option>
+        <option value="draft">Draft</option>
+      </select>
+    </div>
+
+    <div class="sm:col-span-2">
+      <select
+        bind:value={limit}
+        onchange={handleFilterChange}
+        class="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option value={5}>5</option>
+        <option value={10}>10</option>
+        <option value={25}>25</option>
+        <option value={50}>50</option>
+        <option value={100}>100</option>
+      </select>
+    </div>
+  </div>
+
   <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-slate-200">
       <thead class="bg-slate-50">
@@ -327,12 +561,16 @@
                 >
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                {#if berita.status === 'published'}
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {#if berita.status === "published"}
+                  <span
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                  >
                     Published
                   </span>
                 {:else}
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                  <span
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
+                  >
                     Draft
                   </span>
                 {/if}
@@ -359,6 +597,96 @@
       </tbody>
     </table>
   </div>
+  <!-- Pagination Controls -->
+  {#if totalPages > 1}
+    <div
+      class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between"
+    >
+      <div class="flex-1 flex justify-between sm:hidden">
+        <button
+          onclick={() => handlePageChange(page - 1)}
+          disabled={page === 1}
+          class="relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+        >
+          Sebelumnya
+        </button>
+        <button
+          onclick={() => handlePageChange(page + 1)}
+          disabled={page === totalPages}
+          class="ml-3 relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+        >
+          Berikutnya
+        </button>
+      </div>
+      <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm text-slate-700">
+            Menampilkan halaman <span class="font-medium">{page}</span> dari
+            <span class="font-medium">{totalPages}</span>
+            (Total <span class="font-medium">{totalItems}</span> data)
+          </p>
+        </div>
+        <div>
+          <nav
+            class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+            aria-label="Pagination"
+          >
+            <button
+              onclick={() => handlePageChange(page - 1)}
+              disabled={page === 1}
+              class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span class="sr-only">Sebelumnya</span>
+              <svg
+                class="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 19l-7-7 7-7"
+                ></path></svg
+              >
+            </button>
+
+            {#each Array.from({ length: totalPages }) as _, idx}
+              <button
+                onclick={() => handlePageChange(idx + 1)}
+                class="relative inline-flex items-center px-4 py-2 border text-sm font-medium {page ===
+                idx + 1
+                  ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                  : 'bg-white border-slate-300 text-slate-550 hover:bg-slate-50'}"
+              >
+                {idx + 1}
+              </button>
+            {/each}
+
+            <button
+              onclick={() => handlePageChange(page + 1)}
+              disabled={page === totalPages}
+              class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span class="sr-only">Berikutnya</span>
+              <svg
+                class="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                ><path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 5l7 7-7 7"
+                ></path></svg
+              >
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Modal Form -->
@@ -405,10 +733,14 @@
                   id="judul"
                   name="judul"
                   bind:value={$form.judul}
-                  class="mt-1 block w-full border {$errors.judul ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
+                  class="mt-1 block w-full border {$errors.judul
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
                 />
                 {#if $errors.judul}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.judul}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.judul}
+                  </p>
                 {/if}
               </div>
 
@@ -422,7 +754,9 @@
                   id="kategori"
                   name="kategori_id"
                   bind:value={$form.kategori_id}
-                  class="mt-1 block w-full border {$errors.kategori_id ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
+                  class="mt-1 block w-full border {$errors.kategori_id
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
                 >
                   <option value={0} disabled>Pilih Kategori...</option>
                   {#each kategoris as kat}
@@ -430,7 +764,9 @@
                   {/each}
                 </select>
                 {#if $errors.kategori_id}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.kategori_id}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.kategori_id}
+                  </p>
                 {/if}
               </div>
 
@@ -445,29 +781,39 @@
                   name="lokasi"
                   bind:value={$form.lokasi}
                   placeholder="Misal: Jakarta, Indonesia"
-                  class="mt-1 block w-full border {$errors.lokasi ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
+                  class="mt-1 block w-full border {$errors.lokasi
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm"
                 />
                 {#if $errors.lokasi}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.lokasi}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.lokasi}
+                  </p>
                 {/if}
               </div>
 
               <div class="col-span-2">
                 <label
                   for="status"
-                  class="block text-sm font-medium text-slate-700">Status Publikasi</label
+                  class="block text-sm font-medium text-slate-700"
+                  >Status Publikasi</label
                 >
                 <select
                   id="status"
                   name="status"
                   bind:value={$form.status}
-                  class="mt-1 block w-full border {$errors.status ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
+                  class="mt-1 block w-full border {$errors.status
+                    ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                    : 'border-slate-300 focus:ring-indigo-500 focus:border-indigo-500'} rounded-lg px-3 py-2 shadow-sm focus:outline-none sm:text-sm bg-white"
                 >
-                  <option value="published">Published (Tampil di Publik)</option>
+                  <option value="published">Published (Tampil di Publik)</option
+                  >
                   <option value="draft">Draft (Hanya di Admin Panel)</option>
                 </select>
                 {#if $errors.status}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.status}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.status}
+                  </p>
                 {/if}
               </div>
 
@@ -508,8 +854,32 @@
 									hover:file:bg-indigo-100 transition-colors
 									"
                 />
+                {#if isFileTooLarge}
+                  <div
+                    class="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in"
+                  >
+                    <div class="text-xs text-amber-800">
+                      <p class="font-semibold">Ukuran file terlalu besar!</p>
+                      <p>
+                        File terpilih: <span class="font-medium"
+                          >{(selectedFileSize / (1024 * 1024)).toFixed(2)} MB</span
+                        > (Maksimum 5 MB).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onclick={compressImageLocally}
+                      disabled={isCompressing}
+                      class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-sm transition-colors disabled:opacity-50"
+                    >
+                      {isCompressing ? "Mengompres..." : "Kompres Otomatis"}
+                    </button>
+                  </div>
+                {/if}
                 {#if $errors.foto}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.foto}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.foto}
+                  </p>
                 {/if}
               </div>
 
@@ -526,7 +896,9 @@
                   bind:value={$form.deskripsi}
                 ></textarea>
                 {#if $errors.deskripsi}
-                  <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.deskripsi}</p>
+                  <p class="mt-1.5 text-xs text-red-500 font-medium">
+                    {$errors.deskripsi}
+                  </p>
                 {/if}
               </div>
             </div>

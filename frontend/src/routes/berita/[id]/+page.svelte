@@ -42,6 +42,9 @@
 						<a href="/mitra" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
 							Mitra
 						</a>
+						<a href="/akreditasi" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-all">
+							Akreditasi
+						</a>
 					</div>
 				</div>
 				<div class="flex items-center">

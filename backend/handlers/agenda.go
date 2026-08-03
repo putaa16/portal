@@ -72,15 +72,16 @@ func CreateAgenda(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)"})
 	}
 
-	filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
-	if err := c.SaveFile(file, "./uploads/"+filename); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas foto ke server"})
+	jpgFilename := GetJPGFilename(fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename))
+	destPath := "./uploads/images/agenda/" + jpgFilename
+	if err := CompressAndSaveMultipartImage(file, destPath); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan dan mengompresi foto"})
 	}
 
 	agenda.Judul = judul
 	agenda.Tanggal = tanggal
 	agenda.Deskripsi = deskripsi
-	agenda.Foto = "/uploads/" + filename
+	agenda.Foto = "/uploads/images/agenda/" + jpgFilename
 
 	if err := database.DB.Create(&agenda).Error; err != nil {
 		fmt.Printf("GORM Create Agenda Error: %v\n", err)
@@ -93,8 +94,54 @@ func CreateAgenda(c *fiber.Ctx) error {
 
 // GetAllAgenda handles fetching all agendas
 func GetAllAgenda(c *fiber.Ctx) error {
+	query := database.DB.Order("tanggal desc")
+
+	// 1. Pencarian Kata Kunci (search)
+	search := strings.TrimSpace(c.Query("search"))
+	if search != "" {
+		query = query.Where("judul LIKE ? OR deskripsi LIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	// 2. Pagination (Hanya jika query param 'page' dikirim dan > 0)
+	page := c.QueryInt("page")
+	if page > 0 {
+		limit := c.QueryInt("limit")
+		if limit <= 0 {
+			limit = 10 // default limit
+		}
+		offset := (page - 1) * limit
+
+		var total int64
+		var countQuery = database.DB.Model(&models.Agenda{})
+		if search != "" {
+			countQuery = countQuery.Where("judul LIKE ? OR deskripsi LIKE ?", "%"+search+"%", "%"+search+"%")
+		}
+		countQuery.Count(&total)
+
+		var agendas []models.Agenda
+		if err := query.Limit(limit).Offset(offset).Find(&agendas).Error; err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal mengambil data agenda"})
+		}
+
+		totalPages := int(total) / limit
+		if int(total)%limit != 0 {
+			totalPages++
+		}
+
+		return c.JSON(fiber.Map{
+			"data":        agendas,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+	}
+
+	// Jika tidak meminta pagination, kembalikan list array langsung untuk backward compatibility
 	var agendas []models.Agenda
-	database.DB.Order("tanggal desc").Find(&agendas)
+	if err := query.Find(&agendas).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal mengambil data agenda"})
+	}
 	return c.JSON(agendas)
 }
 
@@ -172,16 +219,17 @@ func UpdateAgenda(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Format file foto tidak didukung. Harap unggah file gambar (jpg, jpeg, png, webp, gif)"})
 		}
 
-		filename := fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename)
-		if err := c.SaveFile(file, "./uploads/"+filename); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan berkas foto ke server"})
+		jpgFilename := GetJPGFilename(fmt.Sprintf("%d-%s", time.Now().Unix(), file.Filename))
+		destPath := "./uploads/images/agenda/" + jpgFilename
+		if err := CompressAndSaveMultipartImage(file, destPath); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Gagal menyimpan dan mengompresi foto"})
 		}
 
 		// Delete old file
 		if oldFoto != "" {
 			deleteLocalFile(oldFoto)
 		}
-		agenda.Foto = "/uploads/" + filename
+		agenda.Foto = "/uploads/images/agenda/" + jpgFilename
 	} else {
 		// Pastikan foto lama dipertahankan jika tidak ada update foto
 		agenda.Foto = oldFoto

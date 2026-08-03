@@ -17,6 +17,19 @@
   let existingFotoUrl = $state("");
   let fotoPreviewUrl = $state("");
 
+  // Pagination & Filter States
+  let search = $state("");
+  let page = $state(1);
+  let limit = $state(5);
+  let totalItems = $state(0);
+  let totalPages = $state(1);
+
+  // File Compression States
+  let isFileTooLarge = $state(false);
+  let selectedFileSize = $state(0);
+  let rawFile = $state<File | null>(null);
+  let isCompressing = $state(false);
+
   // Zod validation schema
   const schema = z.object({
     judul: z.string()
@@ -126,12 +139,47 @@
   async function loadData() {
     loading = true;
     try {
-      agendas = await fetchAPI("/agenda");
+      let url = `/agenda?page=${page}&limit=${limit}`;
+      if (search.trim()) {
+        url += `&search=${encodeURIComponent(search.trim())}`;
+      }
+      const resAgenda = await fetchAPI(url);
+
+      if (resAgenda && resAgenda.data) {
+        agendas = resAgenda.data;
+        totalItems = resAgenda.total;
+        totalPages = resAgenda.total_pages;
+      } else {
+        agendas = resAgenda || [];
+        totalItems = agendas.length;
+        totalPages = 1;
+      }
     } catch (error) {
       console.error(error);
       toast.error("Gagal memuat data agenda");
     } finally {
       loading = false;
+    }
+  }
+
+  function handleFilterChange() {
+    page = 1;
+    loadData();
+  }
+
+  let searchTimer: any;
+  function handleSearchInput(e: any) {
+    search = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      handleFilterChange();
+    }, 300);
+  }
+
+  function handlePageChange(newPage: number) {
+    if (newPage >= 1 && newPage <= totalPages) {
+      page = newPage;
+      loadData();
     }
   }
 
@@ -163,6 +211,11 @@
       URL.revokeObjectURL(fotoPreviewUrl);
       fotoPreviewUrl = "";
     }
+    isFileTooLarge = false;
+    selectedFileSize = 0;
+    rawFile = null;
+    isCompressing = false;
+
     if (agenda) {
       editId = agenda.id;
       $form.judul = agenda.judul;
@@ -192,11 +245,89 @@
   function handleFileChange(event: any) {
     const file = event.target.files[0];
     if (file) {
+      rawFile = file;
+      selectedFileSize = file.size;
+      isFileTooLarge = file.size > 5 * 1024 * 1024;
+
       $form.foto = file;
       if (fotoPreviewUrl) {
         URL.revokeObjectURL(fotoPreviewUrl);
       }
       fotoPreviewUrl = URL.createObjectURL(file);
+    }
+  }
+
+  function compressImage(file: File, maxDim: number, quality: number): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event: any) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Gagal membuat context canvas"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.substring(0, file.name.lastIndexOf('.')) + ".jpg", {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error("Gagal mengekspor blob"));
+              }
+            },
+            "image/jpeg",
+            quality
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  }
+
+  async function compressImageLocally() {
+    if (!rawFile) return;
+    isCompressing = true;
+    try {
+      const compressed = await compressImage(rawFile, 1200, 0.8);
+      $form.foto = compressed;
+      selectedFileSize = compressed.size;
+      isFileTooLarge = compressed.size > 5 * 1024 * 1024;
+      if (fotoPreviewUrl) {
+        URL.revokeObjectURL(fotoPreviewUrl);
+      }
+      fotoPreviewUrl = URL.createObjectURL(compressed);
+      toast.success(`Gambar berhasil dikompres! Ukuran baru: ${(compressed.size / (1024 * 1024)).toFixed(2)} MB`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Gagal mengompres gambar");
+    } finally {
+      isCompressing = false;
     }
   }
 
@@ -247,6 +378,36 @@
 </div>
 
 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+  <!-- Filter & Search Panel -->
+  <div class="bg-slate-50 p-4 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-4">
+    <div class="relative sm:col-span-3">
+      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      </div>
+      <input
+        type="text"
+        placeholder="Cari judul atau isi agenda..."
+        value={search}
+        oninput={handleSearchInput}
+        class="block w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      />
+    </div>
+
+    <div class="sm:col-span-1">
+      <select
+        bind:value={limit}
+        onchange={handleFilterChange}
+        class="block w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      >
+        <option value={5}>5</option>
+        <option value={10}>10</option>
+        <option value={25}>25</option>
+        <option value={50}>50</option>
+        <option value={100}>100</option>
+      </select>
+    </div>
+  </div>
+
   <div class="overflow-x-auto">
     <table class="min-w-full divide-y divide-slate-200">
       <thead class="bg-slate-50">
@@ -319,6 +480,64 @@
       </tbody>
     </table>
   </div>
+  <!-- Pagination Controls -->
+  {#if totalPages > 1}
+    <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+      <div class="flex-1 flex justify-between sm:hidden">
+        <button
+          onclick={() => handlePageChange(page - 1)}
+          disabled={page === 1}
+          class="relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+        >
+          Sebelumnya
+        </button>
+        <button
+          onclick={() => handlePageChange(page + 1)}
+          disabled={page === totalPages}
+          class="ml-3 relative inline-flex items-center px-4 py-2 border border-slate-300 text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+        >
+          Berikutnya
+        </button>
+      </div>
+      <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+        <div>
+          <p class="text-sm text-slate-700">
+            Menampilkan halaman <span class="font-medium">{page}</span> dari <span class="font-medium">{totalPages}</span> (Total <span class="font-medium">{totalItems}</span> data)
+          </p>
+        </div>
+        <div>
+          <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+            <button
+              onclick={() => handlePageChange(page - 1)}
+              disabled={page === 1}
+              class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span class="sr-only">Sebelumnya</span>
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            
+            {#each Array.from({ length: totalPages }) as _, idx}
+              <button
+                onclick={() => handlePageChange(idx + 1)}
+                class="relative inline-flex items-center px-4 py-2 border text-sm font-medium {page === idx + 1 ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600' : 'bg-white border-slate-300 text-slate-550 hover:bg-slate-50'}"
+              >
+                {idx + 1}
+              </button>
+            {/each}
+
+            <button
+              onclick={() => handlePageChange(page + 1)}
+              disabled={page === totalPages}
+              class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-slate-300 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span class="sr-only">Berikutnya</span>
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Modal Form -->
@@ -388,6 +607,22 @@
                     hover:file:bg-indigo-100 transition-colors
                   "
                 />
+                {#if isFileTooLarge}
+                  <div class="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+                    <div class="text-xs text-amber-800">
+                      <p class="font-semibold">Ukuran file terlalu besar!</p>
+                      <p>File terpilih: <span class="font-medium">{(selectedFileSize / (1024 * 1024)).toFixed(2)} MB</span> (Maksimum 5 MB).</p>
+                    </div>
+                    <button
+                      type="button"
+                      onclick={compressImageLocally}
+                      disabled={isCompressing}
+                      class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md shadow-sm transition-colors disabled:opacity-50"
+                    >
+                      {isCompressing ? "Mengompres..." : "Kompres Otomatis"}
+                    </button>
+                  </div>
+                {/if}
                 {#if $errors.foto}
                   <p class="mt-1.5 text-xs text-red-500 font-medium">{$errors.foto}</p>
                 {/if}
